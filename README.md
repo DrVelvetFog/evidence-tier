@@ -12,4 +12,4 @@ Rules in one breath: the tier names the *check*, not the confidence (R1); eviden
 
 `ran` claims resolve against [rv](../reversible/) journals (`rv:<repo>#<seq>` + output digest). Worked example in `examples/` is real: six claims from the rv v0 report, one of which is honestly downgraded because it ran before journaling existed.
 
-Carriers: sidecar JSON (here) · MCP tool-result `_meta` · a chat `Evidence:` footer for humans.
+Carriers: sidecar JSON (here) · [OKF bundle frontmatter](OKF.md) (`sources[].evidence`) · MCP tool-result `_meta` · a chat `Evidence:` footer for humans.

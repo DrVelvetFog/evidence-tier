@@ -110,6 +110,7 @@ Input: the Statement, the subject (or its digest), and read access to whatever t
 
 - **Sidecar** — `<output>.evidence.json` next to any file; the reference implementation.
 - **MCP tool results** — the predicate alone in `_meta["io.github.drvelvetfog.evidence-tier/v0"]`, subject implied (the result's content). This follows the precedent SEP-414 set for trace context in `_meta`, and is the natural home for the "annotations on tool responses" the Tool Annotations IG is discussing.
+- **OKF bundles** — `sources[].evidence` (`ran`/`read`/`told`) + `generated.evidence` (`recalled`/`inferred`) on Open Knowledge Format concepts; additive under OKF §4.1. See [OKF.md](OKF.md).
 - **Chat display** — a convention, not the record: a short `Evidence` footer listing claim → tier, or inline markers `⟨ran⟩ ⟨read⟩ ⟨told⟩ ⟨recalled⟩`. Display MAY drop evidence descriptors; the record MUST NOT.
 
 ## 8. Relationship to the other two specs
