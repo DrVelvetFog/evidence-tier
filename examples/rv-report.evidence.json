@@ -1,0 +1,99 @@
+{
+ "_type": "https://in-toto.io/Statement/v1",
+ "subject": [
+  {
+   "name": "report.md",
+   "digest": {
+    "sha256": "b42dc0ac6ff3628a98661306037caa86159d0ab123422f163900953ac1a8eea1"
+   }
+  }
+ ],
+ "predicateType": "https://github.com/DrVelvetFog/evidence-tier/v0",
+ "predicate": {
+  "producer": {
+   "kind": "agent",
+   "tool": "claude-code",
+   "model": "claude-fable-5",
+   "session": "2026-08-17"
+  },
+  "claims": [
+   {
+    "id": "c1",
+    "text": "test.sh passes 15/15",
+    "tier": "ran",
+    "evidence": [
+     {
+      "kind": "action",
+      "ref": "rv:~/reversible#5",
+      "digest": {
+       "sha256": "76f1da8316b53f70879be069394b33d89762144e88134930d42ec7dcc309260a"
+      }
+     }
+    ]
+   },
+   {
+    "id": "c2",
+    "text": "snapshot 0.27s cold / 0.10s warm on openmed (2,786 files)",
+    "tier": "ran",
+    "evidence": [
+     {
+      "kind": "action",
+      "ref": "rv:~/openmed#1",
+      "digest": {
+       "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+     }
+    ]
+   },
+   {
+    "id": "c3",
+    "text": "in-toto Statement subjects MUST have a digest",
+    "tier": "read",
+    "evidence": [
+     {
+      "kind": "artifact",
+      "uri": "file:in-toto-statement-v1.md",
+      "digest": {
+       "sha256": "cbe684a18b812b8b613d9202eb43b2ea24477f91a2ad6ca5be935185a455ebea"
+      },
+      "span": {
+       "lines": [
+        15,
+        15
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "id": "c4",
+    "text": "agent-rewind has 0 GitHub stars",
+    "tier": "told",
+    "evidence": [
+     {
+      "kind": "party",
+      "who": "tool:gh-api",
+      "at": "2026-08-17T13:58:00Z"
+     }
+    ]
+   },
+   {
+    "id": "c5",
+    "text": "W3C PROV-DM models entity, activity, agent",
+    "tier": "recalled",
+    "evidence": []
+   },
+   {
+    "id": "c6",
+    "text": "the standards slot is the mechanism, not a boolean hint",
+    "tier": "inferred",
+    "derived_from": [
+     "c3",
+     "c4"
+    ],
+    "evidence": [],
+    "confidence": 0.8
+   }
+  ]
+ }
+}

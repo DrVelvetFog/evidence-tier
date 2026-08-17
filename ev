@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""ev — verify Evidence-Tier statements (see SPEC.md).
+
+  ev verify <statement.json> [--subject <file>] [--strict]
+  ev digest <file>                 sha256 for use in subject/artifact digests
+
+Recomputes: subject binding, evidence resolution (rv: action refs, file: artifacts,
+optional spans), and effective tiers (unresolvable -> told; inferred -> weakest premise).
+Asserted fields (text, producer, confidence, declared tier) are reported, never trusted.
+stdlib only; offline; http(s) artifacts are reported as unresolved in v0.
+"""
+import hashlib, json, os, sys
+
+RANK = {"ran": 3, "read": 2, "told": 1, "recalled": 0}
+NEEDS = {"ran": "action", "read": "artifact", "told": "party"}
+
+
+def sha256_file(p):
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def resolve_action(ev, base):
+    """rv:<repo-root>#<seq> -> compare digest to journal record's output sha256 / post tree."""
+    ref = ev.get("ref", "")
+    if not ref.startswith("rv:") or "#" not in ref:
+        return False, f"unsupported action ref {ref!r}"
+    root, seq = ref[3:].rsplit("#", 1)
+    root = os.path.expanduser(root)
+    if not os.path.isabs(root):
+        root = os.path.join(base, root)
+    j = os.path.join(root, ".git", "rv", "journal.ndjson")
+    if not os.path.exists(j):
+        return False, f"no rv journal at {root}"
+    rec = next((json.loads(l) for l in open(j) if l.strip() and json.loads(l)["seq"] == int(seq)), None)
+    if not rec:
+        return False, f"rv seq {seq} not found"
+    want = ev.get("digest", {})
+    have = {"sha256": rec.get("action", {}).get("output", {}).get("sha256"),
+            "git-sha1-tree": rec["post"]["tree"].split(":", 1)[1]}
+    if not want:
+        return False, "action evidence has no digest (R2)"
+    for alg, val in want.items():
+        if have.get(alg) != val:
+            return False, f"digest mismatch on {alg}"
+    return True, f"rv#{seq} {rec['ts']} output+tree digests match"
+
+
+def resolve_artifact(ev, base):
+    uri = ev.get("uri", "")
+    want = ev.get("digest", {})
+    if not want:
+        return False, "artifact has no digest (R2)"
+    if uri.startswith("http://") or uri.startswith("https://"):
+        return False, "http artifact: unresolved offline (v0)"
+    path = uri[5:] if uri.startswith("file:") else uri
+    path = os.path.expanduser(path)
+    if not os.path.isabs(path):
+        path = os.path.join(base, path)
+    if not os.path.exists(path):
+        return False, f"artifact missing: {path}"
+    if want.get("sha256") != sha256_file(path):
+        return False, "artifact digest mismatch"
+    msg = "artifact digest matches"
+    span = ev.get("span")
+    if span and "lines" in span:
+        a, b = span["lines"]
+        lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
+        sl = "\n".join(lines[a - 1:b]).strip()
+        msg += f"; span L{a}-{b}: {sl[:80]!r}"
+    return True, msg
+
+
+def verify(stmt, base, subject_path=None):
+    out = {"subject": None, "claims": [], "downgraded": 0}
+    if stmt.get("_type") != "https://in-toto.io/Statement/v1":
+        out["subject"] = ("FAIL", "not an in-toto Statement v1")
+    elif subject_path:
+        want = (stmt.get("subject") or [{}])[0].get("digest", {}).get("sha256")
+        got = sha256_file(subject_path)
+        out["subject"] = ("OK", "subject digest bound") if want == got else ("FAIL", "subject digest MISMATCH (R5)")
+    else:
+        out["subject"] = ("SKIP", "no --subject given; binding not checked")
+
+    claims = stmt.get("predicate", {}).get("claims", [])
+    eff, reasons = {}, {}
+    for c in claims:  # pass 1: leaf tiers
+        t, evs = c.get("tier"), c.get("evidence", [])
+        if t == "recalled":
+            eff[c["id"]], reasons[c["id"]] = "recalled", "no evidence by definition"
+        elif t == "inferred":
+            continue
+        elif t in NEEDS:
+            kinds = [e.get("kind") for e in evs]
+            if NEEDS[t] not in kinds:
+                eff[c["id"]], reasons[c["id"]] = "told", f"declared {t} but no {NEEDS[t]} evidence -> told (R2)"
+                continue
+            if t == "told":
+                eff[c["id"]], reasons[c["id"]] = "told", "party: " + ", ".join(e.get("who", "?") for e in evs)
+                continue
+            oks, msgs = [], []
+            for e in evs:
+                if e.get("kind") != NEEDS[t]:
+                    continue
+                ok, m = (resolve_action if t == "ran" else resolve_artifact)(e, base)
+                oks.append(ok); msgs.append(m)
+            if all(oks):
+                eff[c["id"]], reasons[c["id"]] = t, "; ".join(msgs)
+            else:
+                eff[c["id"]], reasons[c["id"]] = "told", "unresolved -> told (R3): " + "; ".join(msgs)
+        else:
+            eff[c["id"]], reasons[c["id"]] = "told", f"unknown tier {t!r} -> told"
+
+    def infer(cid, stack):  # pass 2: inferred = weakest premise, cycles -> told
+        if cid in eff:
+            return eff[cid]
+        c = next((x for x in claims if x["id"] == cid), None)
+        if not c or cid in stack:
+            return "told"
+        prem = c.get("derived_from", [])
+        if not prem or c.get("evidence"):
+            eff[cid], reasons[cid] = "told", "inferred needs derived_from and no evidence (R4)"
+            return "told"
+        tiers = [infer(p, stack | {cid}) for p in prem]
+        weakest = min(tiers, key=lambda t: RANK.get(t, 1))
+        eff[cid], reasons[cid] = weakest, f"weakest of {prem} = {weakest} (R4)"
+        return weakest
+
+    for c in claims:
+        if c.get("tier") == "inferred":
+            infer(c["id"], set())
+
+    for c in claims:
+        d, e = c.get("tier"), eff.get(c["id"], "told")
+        down = d != "inferred" and RANK.get(e, 1) < RANK.get(d, 1)
+        out["downgraded"] += int(down)
+        out["claims"].append({"id": c["id"], "text": c.get("text", ""), "declared": d,
+                              "effective": e, "downgraded": down, "reason": reasons.get(c["id"], "")})
+    return out
+
+
+def main():
+    if len(sys.argv) < 3:
+        print(__doc__); sys.exit(2)
+    cmd = sys.argv[1]
+    if cmd == "digest":
+        print(sha256_file(sys.argv[2])); return
+    if cmd != "verify":
+        sys.exit(f"ev: unknown command {cmd}")
+    path = sys.argv[2]; args = sys.argv[3:]
+    subject = args[args.index("--subject") + 1] if "--subject" in args else None
+    stmt = json.load(open(path))
+    r = verify(stmt, os.path.dirname(os.path.abspath(path)), subject)
+    print(f"subject: {r['subject'][0]}  {r['subject'][1]}")
+    print(f"{'id':<5}{'declared':<10}{'effective':<10} text")
+    for c in r["claims"]:
+        flag = " v" if c["downgraded"] else "  "
+        print(f"{c['id']:<5}{c['declared']:<10}{c['effective']:<10}{flag} {c['text'][:60]}")
+        print(f"{'':<27}{c['reason']}")
+    ok = r["subject"][0] != "FAIL" and r["downgraded"] == 0
+    print(("VERIFIED" if ok else f"UNVERIFIED ({r['downgraded']} downgraded"
+                              + (", subject FAIL" if r["subject"][0] == "FAIL" else "") + ")"))
+    if r["subject"][0] == "FAIL" or ("--strict" in args and r["downgraded"]):
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
