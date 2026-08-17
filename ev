@@ -23,9 +23,34 @@ def sha256_file(p):
     return h.hexdigest()
 
 
-def resolve_action(ev, base):
-    """rv:<repo-root>#<seq> -> compare digest to journal record's output sha256 / post tree."""
+def resolve_xv(ev, base):
+    """xv:<attest.json path>#<example id> -> compare digest to attested stdout sha256."""
     ref = ev.get("ref", "")
+    path, eid = ref[3:].rsplit("#", 1)
+    path = os.path.expanduser(path)
+    if not os.path.isabs(path):
+        path = os.path.join(base, path)
+    if not os.path.exists(path):
+        return False, f"no attestations at {path}"
+    att = next((a for a in json.load(open(path)).get("attestations", []) if a["predicate"]["id"] == eid), None)
+    if not att:
+        return False, f"xv example {eid!r} not attested"
+    want = ev.get("digest", {}).get("sha256")
+    if not want:
+        return False, "action evidence has no digest (R2)"
+    if att["predicate"]["exit"] != 0:
+        return False, f"attested exit={att['predicate']['exit']}"
+    if att["predicate"]["stdout"]["sha256"] != want:
+        return False, "digest mismatch on attested stdout"
+    return True, f"xv:{eid} v={att['predicate']['version']} {att['predicate']['ran_at']} stdout digest matches"
+
+
+def resolve_action(ev, base):
+    """rv:<repo-root>#<seq> -> compare digest to journal record's output sha256 / post tree.
+       xv:<attest.json>#<id>  -> compare digest to a verified-example attestation."""
+    ref = ev.get("ref", "")
+    if ref.startswith("xv:") and "#" in ref:
+        return resolve_xv(ev, base)
     if not ref.startswith("rv:") or "#" not in ref:
         return False, f"unsupported action ref {ref!r}"
     root, seq = ref[3:].rsplit("#", 1)

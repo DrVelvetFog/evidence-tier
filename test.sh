@@ -48,5 +48,23 @@ echo "$OUT" | grep -q '^a    ran       told ' && ok "ran w/o action -> told (R2)
 echo "$OUT" | grep -q '^b    inferred  told ' && echo "$OUT" | grep -q '^c    inferred  told ' && ok "cycle -> told" || no "cycle"
 echo "$OUT" | grep -q '^d    read      told ' && ok "digestless read -> told (R2)" || no "shape d"
 
+echo "6. xv: attested example resolves as ran; wrong digest -> told"
+mkdir -p "$T/xv"; printf 'echo hi\n' > "$T/xv/ex.sh"
+python3 - "$T" <<'PY'
+import json,sys,hashlib
+T=sys.argv[1]; out="hi\n"; d=hashlib.sha256(out.encode()).hexdigest()
+json.dump({"schema":"verified-examples/v0","attestations":[{"_type":"https://in-toto.io/Statement/v1",
+ "subject":[{"name":"ex.sh","digest":{"sha256":"x"}}],"predicateType":"https://github.com/DrVelvetFog/verified-examples/v0",
+ "predicate":{"id":"ex","version":"1","exit":0,"stdout":{"sha256":d},"ran_at":"t"}}]}, open(f"{T}/xv/attest.json","w"))
+json.dump({"_type":"https://in-toto.io/Statement/v1","subject":[{"name":"_","digest":{"sha256":"0"*64}}],
+ "predicateType":"https://github.com/DrVelvetFog/evidence-tier/v0","predicate":{"claims":[
+  {"id":"g","text":"ex prints hi","tier":"ran","evidence":[{"kind":"action","ref":f"xv:{T}/xv/attest.json#ex","digest":{"sha256":d}}]},
+  {"id":"b","text":"ex prints hi (wrong digest)","tier":"ran","evidence":[{"kind":"action","ref":f"xv:{T}/xv/attest.json#ex","digest":{"sha256":"0"*64}}]}]}},
+ open(f"{T}/xv/claims.json","w"))
+PY
+OUT=$(run "$T/xv/claims.json")
+echo "$OUT" | grep -q '^g    ran       ran ' && ok "xv attestation resolves as ran" || no "xv ran"
+echo "$OUT" | grep -q '^b    ran       told       v' && ok "xv digest mismatch -> told" || no "xv told"
+
 echo; echo "pass=$pass fail=$fail"
 [ $fail -eq 0 ]

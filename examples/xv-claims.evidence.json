@@ -1,0 +1,44 @@
+{
+ "_type": "https://in-toto.io/Statement/v1",
+ "subject": [
+  {
+   "name": "_",
+   "digest": {
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+   }
+  }
+ ],
+ "predicateType": "https://github.com/DrVelvetFog/evidence-tier/v0",
+ "predicate": {
+  "claims": [
+   {
+    "id": "q",
+    "text": "rv quickstart: undo reaches the pre tree",
+    "tier": "ran",
+    "evidence": [
+     {
+      "kind": "action",
+      "ref": "xv:~/reversible/examples/attest.json#quickstart",
+      "digest": {
+       "sha256": "9b3abda77d0e859af024052931e8b061b0a8953737caf370633ebb6cf2e12982"
+      }
+     }
+    ]
+   },
+   {
+    "id": "bad",
+    "text": "same claim, wrong digest",
+    "tier": "ran",
+    "evidence": [
+     {
+      "kind": "action",
+      "ref": "xv:~/reversible/examples/attest.json#quickstart",
+      "digest": {
+       "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+     }
+    ]
+   }
+  ]
+ }
+}
