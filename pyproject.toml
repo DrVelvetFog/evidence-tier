@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "evidence-tier"
+version = "0.1.0"
+description = "Label every claim ran / read / told / recalled / inferred, as an in-toto Statement."
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Antoni Jagodka", email = "tjagodka@gmail.com" }]
+keywords = ["supply-chain", "provenance", "in-toto", "attestation", "evidence"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+  "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/DrVelvetFog/evidence-tier"
+Source = "https://github.com/DrVelvetFog/evidence-tier"
+Specification = "https://github.com/DrVelvetFog/evidence-tier/blob/main/SPEC.md"
+
+[project.scripts]
+ev = "evidence_tier:main"
+
+# The tool is a single stdlib-only file named `ev` at the repository root, kept
+# executable so `./ev` works from a clone. force-include ships that exact file as
+# the module `evidence_tier` in the wheel, so the published package and the
+# repository never drift apart and nothing needed moving to package it.
+[tool.hatch.build.targets.wheel.force-include]
+"ev" = "evidence_tier.py"
+
+[tool.hatch.build.targets.sdist]
+include = ["ev", "SPEC.md", "README.md", "LICENSE", "examples/", "pyproject.toml"]
